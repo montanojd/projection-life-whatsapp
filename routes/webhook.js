@@ -45,25 +45,42 @@ Servicios disponibles:
 
 // Webhook POST para mensajes de Twilio
 router.post('/', (req, res) => {
-  console.log('Mensaje recibido:', req.body);
-
   const message = req.body.Body ? req.body.Body.toLowerCase().trim() : '';
   const from = req.body.From || '';
+  const profileName = req.body.ProfileName || '';
+  
+  console.log(`💬 WHATSAPP ENTRANTE: ${profileName} (${from}): ${message}`);
 
   let response = '';
+  let intent = 'unknown';
 
+  // Determinar intent y respuesta
   if (message.includes('hola') || message.includes('hello') || message.includes('buenos')) {
     response = responses.greeting;
+    intent = 'greeting';
   } else if (message === '1' || message.includes('pad')) {
     response = responses.pad;
+    intent = 'pad_inquiry';
   } else if (message === '2' || message.includes('enfermeria')) {
     response = responses.enfermeria;
+    intent = 'nursing_inquiry';
   } else if (message === '3' || message.includes('consulta')) {
     response = `🩺 *Consulta Externa*\n\nEspecialidades:\n🧠 Neurología\n👴 Geriatría\n🦴 Fisiatría\n\n📍 Sedes disponibles en Bucaramanga, Barranca, Tolima y Casanare.\n\n¿Para cuál especialidad necesita cita?`;
+    intent = 'consultation_inquiry';
   } else if (message === '4' || message.includes('asesor')) {
     response = `👨‍⚕️ *Conectando con Asesor*\n\nUn momento por favor, lo conectamos con nuestro equipo especializado.\n\n¿Puede contarnos más detalles de su consulta?`;
+    intent = 'human_escalation';
+  } else if (message.includes('menu') || message.includes('ayuda')) {
+    response = responses.greeting;
+    intent = 'help_request';
   } else {
     response = `Gracias por contactarnos. Para mejor atención, responda con:\n\n1️⃣ PAD\n2️⃣ Enfermería\n3️⃣ Consulta\n4️⃣ Asesor\n\nO escriba "menu" para ver opciones.`;
+    intent = 'unknown';
+  }
+
+  // 🔥 REGISTRAR MENSAJE EN STORAGE (usando función global)
+  if (global.registerWhatsAppMessage) {
+    global.registerWhatsAppMessage(from, message, intent, response, 'completed');
   }
 
   // Respuesta en formato TwiML
@@ -72,6 +89,8 @@ router.post('/', (req, res) => {
 <Response>
   <Message>${response}</Message>
 </Response>`);
+  
+  console.log(`✅ Respuesta enviada a ${from}: ${intent}`);
 });
 
 module.exports = router;
