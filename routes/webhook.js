@@ -1,90 +1,77 @@
 const express = require('express');
 const router = express.Router();
-const messageHandler = require('../services/messageHandler');
-const webhookVerification = require('../middleware/webhookVerification');
-const logger = require('../utils/logger');
 
-// Apply middleware
-router.use(webhookVerification.logWebhookActivity.bind(webhookVerification));
-router.use(webhookVerification.rateLimitCheck.bind(webhookVerification));
+// Respuestas para PROJECTION LIFE
+const responses = {
+  greeting: `¡Hola! 👋 Bienvenido a PROJECTION LIFE COLOMBIA
 
-// Webhook verification endpoint (GET)
-router.get('/', webhookVerification.verifyWebhook.bind(webhookVerification));
+Somos su aliado en servicios de salud domiciliaria con más de 15 años de experiencia.
 
-// Webhook message endpoint (POST)
-router.post('/', 
-    webhookVerification.verifySignature.bind(webhookVerification),
-    webhookVerification.validateWebhookPayload.bind(webhookVerification),
-    async (req, res) => {
-        try {
-            logger.info('Processing webhook message', {
-                entries: req.body.entry?.length || 0,
-                timestamp: new Date().toISOString()
-            });
+Para ayudarle mejor, seleccione:
+1️⃣ PAD - Atención Domiciliaria
+2️⃣ Enfermería Domiciliaria  
+3️⃣ Consulta Externa
+4️⃣ Hablar con asesor
 
-            // Process the webhook data
-            await messageHandler.processMessage(req.body);
+Responda con el número de su opción.`,
 
-            // Send success response immediately
-            res.status(200).json({
-                status: 'success',
-                message: 'Message processed successfully'
-            });
+  pad: `🏥 *PAD - Programa Atención Domiciliaria*
 
-            logger.info('Webhook message processed successfully');
+✅ Medicina general en casa
+✅ Seguimiento personalizado  
+✅ Atención especializada
+✅ Cobertura: Santander, Casanare, Tolima
 
-        } catch (error) {
-            logger.error('Error processing webhook message:', error);
-            
-            // Send error response
-            res.status(500).json({
-                status: 'error',
-                message: 'Internal server error',
-                error: process.env.NODE_ENV === 'development' ? error.message : undefined
-            });
-        }
-    }
-);
+📋 Para agendar necesitamos:
+- Nombre del paciente
+- Teléfono de contacto
+- Dirección completa
 
-// Status endpoint for monitoring
-router.get('/status', (req, res) => {
-    res.status(200).json({
-        status: 'active',
-        service: 'PROJECTION LIFE WhatsApp Webhook',
-        timestamp: new Date().toISOString(),
-        version: '1.0.0',
-        endpoints: {
-            verification: 'GET /webhook',
-            messages: 'POST /webhook',
-            status: 'GET /webhook/status'
-        }
-    });
-});
+¿Puede proporcionarnos estos datos?`,
 
-// Test endpoint for development
-router.post('/test', (req, res) => {
-    if (process.env.NODE_ENV !== 'development') {
-        return res.status(404).json({ error: 'Endpoint not available' });
-    }
+  enfermeria: `👩‍⚕️ *Enfermería Domiciliaria*
 
-    logger.info('Test webhook called', req.body);
-    
-    res.status(200).json({
-        status: 'test_success',
-        received: req.body,
-        timestamp: new Date().toISOString()
-    });
-});
+Servicios disponibles:
+- Curaciones especializadas
+- Procedimientos médicos
+- Cuidados post-operatorios
+- Administración de medicamentos
 
-// Error handling for webhook routes
-router.use((error, req, res, next) => {
-    logger.error('Webhook route error:', error);
-    
-    res.status(500).json({
-        status: 'error',
-        message: 'Webhook processing error',
-        timestamp: new Date().toISOString()
-    });
+🕐 Horarios: Lunes a Viernes 7AM-6PM
+🚨 Urgencias: 24 horas
+
+¿Qué procedimiento necesita?`
+};
+
+// Webhook POST para mensajes de Twilio
+router.post('/', (req, res) => {
+  console.log('Mensaje recibido:', req.body);
+
+  const message = req.body.Body ? req.body.Body.toLowerCase().trim() : '';
+  const from = req.body.From || '';
+
+  let response = '';
+
+  if (message.includes('hola') || message.includes('hello') || message.includes('buenos')) {
+    response = responses.greeting;
+  } else if (message === '1' || message.includes('pad')) {
+    response = responses.pad;
+  } else if (message === '2' || message.includes('enfermeria')) {
+    response = responses.enfermeria;
+  } else if (message === '3' || message.includes('consulta')) {
+    response = `🩺 *Consulta Externa*\n\nEspecialidades:\n🧠 Neurología\n👴 Geriatría\n🦴 Fisiatría\n\n📍 Sedes disponibles en Bucaramanga, Barranca, Tolima y Casanare.\n\n¿Para cuál especialidad necesita cita?`;
+  } else if (message === '4' || message.includes('asesor')) {
+    response = `👨‍⚕️ *Conectando con Asesor*\n\nUn momento por favor, lo conectamos con nuestro equipo especializado.\n\n¿Puede contarnos más detalles de su consulta?`;
+  } else {
+    response = `Gracias por contactarnos. Para mejor atención, responda con:\n\n1️⃣ PAD\n2️⃣ Enfermería\n3️⃣ Consulta\n4️⃣ Asesor\n\nO escriba "menu" para ver opciones.`;
+  }
+
+  // Respuesta en formato TwiML
+  res.set('Content-Type', 'text/xml');
+  res.send(`<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+  <Message>${response}</Message>
+</Response>`);
 });
 
 module.exports = router;
